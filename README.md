@@ -18,15 +18,15 @@ This repository provides everything needed to deploy and operate a complete Kube
 │                                                                             │
 │  ┌───────────────────────────────────────────────────────────────────────┐  │
 │  │                              VPC                                      │  │
-│  │  ┌─────────────────────────┐    ┌─────────────────────────┐           │  │
-│  │  │     Public Subnets      │    │    Private Subnets      │           │  │
-│  │  │  ┌───────────────────┐  │    │  ┌───────────────────┐  │           │  │
-│  │  │  │  ALB (Ingress)    │  │    │  │   EKS Node Group  │  │           │  │
-│  │  │  └───────────────────┘  │    │  │   ┌───────────┐   │  │           │  │
-│  │  │  ┌───────────────────┐  │    │  │   │ Pod (IRSA)│   │  │           │  │
-│  │  │  │   NAT Gateway     │──┼────┼──│   └───────────┘   │  │           │  │
-│  │  │  └───────────────────┘  │    │  └───────────────────┘  │           │  │
-│  │  └─────────────────────────┘    └─────────────────────────┘           │  │
+│  │  ┌─────────────────────────┐    ┌─────────────────────────┐          │  │
+│  │  │     Public Subnets      │    │    Private Subnets      │          │  │
+│  │  │  ┌───────────────────┐  │    │  ┌───────────────────┐  │          │  │
+│  │  │  │  ALB (Ingress)    │  │    │  │   EKS Node Group  │  │          │  │
+│  │  │  └───────────────────┘  │    │  │   ┌───────────┐   │  │          │  │
+│  │  │  ┌───────────────────┐  │    │  │   │ Pod (IRSA)│   │  │          │  │
+│  │  │  │   NAT Gateway     │──┼────┼──│   └───────────┘   │  │          │  │
+│  │  │  └───────────────────┘  │    │  └───────────────────┘  │          │  │
+│  │  └─────────────────────────┘    └─────────────────────────┘          │  │
 │  └───────────────────────────────────────────────────────────────────────┘  │
 │                                                                             │
 │  ┌─────────────────────┐  ┌─────────────────────┐  ┌─────────────────────┐  │
@@ -263,6 +263,40 @@ fargate_profiles = {
 | aws | ~> 5.0 |
 | helm | ~> 2.0 |
 | tls | ~> 4.0 |
+
+## Versioning
+
+This module follows [Semantic Versioning](https://semver.org/). To use a specific version:
+
+```hcl
+module "eks" {
+  source = "git::https://github.com/YOUR_USERNAME/terraform-aws-eks-platform.git//terraform/modules/eks?ref=v1.0.0"
+  # ...
+}
+
+module "vpc" {
+  source = "git::https://github.com/YOUR_USERNAME/terraform-aws-eks-platform.git//terraform/modules/vpc?ref=v1.0.0"
+  # ...
+}
+```
+
+### Version Pinning (Recommended)
+
+Always pin to a specific version in production:
+
+| Method | Example | Use Case |
+|--------|---------|----------|
+| Exact version | `?ref=v1.0.0` | Production (recommended) |
+| Minor version | `?ref=v1.0` | Auto-patch updates |
+| Branch | `?ref=main` | Development only |
+
+### Creating Releases
+
+```bash
+# Tag a new release
+git tag -a v1.0.0 -m "Initial release"
+git push origin v1.0.0
+```
 
 ## Cost Optimization
 
