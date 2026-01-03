@@ -1,0 +1,180 @@
+name: Deploy Service
+
+# ============================================================================
+# PREREQUISITES
+# ============================================================================
+#
+# 1. AWS IAM User Setup (if using access keys):
+#    Create a CD user with EKS and ECR permissions, then add to aws-auth ConfigMap:
+#    kubectl edit configmap aws-auth -n kube-system
+#
+#    mapUsers: |
+#      - userarn: arn:aws:iam::123456789012:user/myproject-cd-user
+#        username: cd-user
+#        groups:
+#        - system:masters
+#
+# 2. GitHub OIDC (recommended):
+#    Use the ci-cd Terraform module to create the OIDC provider and role.
+#    Then configure the role ARN in the workflow.
+#
+# 3. Required Secrets:
+#    - AWS_ACCESS_KEY_ID (if using IAM user)
+#    - AWS_SECRET_ACCESS_KEY (if using IAM user)
+#    - AWS_ROLE_ARN (if using OIDC)
+#
+# ============================================================================
+
+on:
+  workflow_dispatch:
+    inputs:
+      service:
+        description: "Service name to deploy"
+        required: true
+        type: string
+      environment:
+        description: "Target environment"
+        required: true
+        type: choice
+        options: [dev, stage, prod]
+        default: "dev"
+      image_tag:
+        description: "Docker image tag"
+        required: true
+        type: string
+      region:
+        description: "AWS region"
+        required: true
+        type: string
+        default: "us-east-1"
+      cluster_name:
+        description: "EKS cluster name"
+        required: true
+        type: string
+      secrets_json:
+        description: "Base64 encoded JSON of environment secrets"
+        required: false
+        type: string
+
+permissions:
+  id-token: write
+  contents: write
+
+env:
+  SERVICE: ${{ github.event.inputs.service }}
+  ENVIRONMENT: ${{ github.event.inputs.environment }}
+  REGION: ${{ github.event.inputs.region }}
+  CLUSTER_NAME: ${{ github.event.inputs.cluster_name }}
+  IMAGE_TAG: ${{ github.event.inputs.image_tag }}
+
+jobs:
+  deploy:
+    name: Deploy to EKS
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+          token: ${{ github.token }}
+
+      - name: Set up environment variables
+        run: |
+          NAMESPACE="${{ env.SERVICE }}-${{ env.ENVIRONMENT }}"
+          echo "NAMESPACE=$NAMESPACE" >> $GITHUB_ENV
+
+      - name: Install yq
+        run: |
+          wget -qO /usr/local/bin/yq \
+            https://github.com/mikefarah/yq/releases/download/v4.40.5/yq_linux_amd64
+          chmod +x /usr/local/bin/yq
+
+      - name: Update Helm values
+        run: |
+          cd helm/values/${{ env.ENVIRONMENT }}
+
+          if [ ! -f "${{ env.SERVICE }}.yaml" ]; then
+            echo "Error: Values file for service ${{ env.SERVICE }} does not exist."
+            exit 1
+          fi
+
+          yq e ".image.tag = \"${{ env.IMAGE_TAG }}\"" -i ${{ env.SERVICE }}.yaml
+
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add ${{ env.SERVICE }}.yaml
+          git commit -m "ci: update ${{ env.SERVICE }} image to ${{ env.SERVICE }}-${{ env.IMAGE_TAG }}" \
+            || echo "No changes to commit"
+          git push
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.14.0
+
+      # Option 1: Configure AWS using OIDC (recommended)
+      - name: Configure AWS credentials (OIDC)
+        if: ${{ vars.USE_OIDC == 'true' }}
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.REGION }}
+
+      # Option 2: Configure AWS using access keys
+      - name: Configure AWS credentials (Access Keys)
+        if: ${{ vars.USE_OIDC != 'true' }}
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.REGION }}
+
+      - name: Configure kubectl
+        run: |
+          aws eks update-kubeconfig \
+            --region ${{ env.REGION }} \
+            --name ${{ env.CLUSTER_NAME }}
+
+      - name: Create namespace
+        run: |
+          kubectl create namespace ${{ env.NAMESPACE }} \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Create secrets (if provided)
+        if: ${{ github.event.inputs.secrets_json != '' }}
+        run: |
+          echo "${{ github.event.inputs.secrets_json }}" | base64 -d | \
+            jq -r 'to_entries[] | "\(.key)=\(.value | tostring)"' > /tmp/env_vars.txt
+
+          kubectl create secret generic ${{ env.NAMESPACE }}-env \
+            -n ${{ env.NAMESPACE }} \
+            --from-env-file=/tmp/env_vars.txt \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+          rm /tmp/env_vars.txt
+
+      - name: Deploy with Helm
+        run: |
+          EXTRA_ARGS=""
+          if [ -n "${{ github.event.inputs.secrets_json }}" ]; then
+            EXTRA_ARGS="--set-string envFromSecret=${{ env.NAMESPACE }}-env"
+          fi
+
+          helm upgrade --install ${{ env.NAMESPACE }} \
+            ./helm/charts/microservice \
+            -f ./helm/values/${{ env.ENVIRONMENT }}/${{ env.SERVICE }}.yaml \
+            -n ${{ env.NAMESPACE }} \
+            $EXTRA_ARGS
+
+      - name: Verify deployment
+        run: |
+          kubectl rollout status deployment/${{ env.NAMESPACE }} \
+            -n ${{ env.NAMESPACE }} \
+            --timeout=180s || true
+
+          echo "=== Deployment Status ==="
+          kubectl get pods,svc,ingress \
+            -l app.kubernetes.io/name=${{ env.SERVICE }} \
+            -n ${{ env.NAMESPACE }}

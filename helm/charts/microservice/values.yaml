@@ -1,0 +1,135 @@
+# ============================================================================
+# MICROSERVICE HELM CHART DEFAULT VALUES
+# ============================================================================
+
+# Service name and environment
+name: myservice
+environment: dev
+
+# Replica count (ignored if autoscaling is enabled)
+replicaCount: 2
+
+# ============================================================================
+# CONTAINER IMAGE
+# ============================================================================
+
+image:
+  repository: ""  # e.g., 123456789012.dkr.ecr.us-east-1.amazonaws.com/myproject/services
+  tag: "latest"
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+# ============================================================================
+# SERVICE ACCOUNT (IRSA)
+# ============================================================================
+
+serviceAccount:
+  create: true
+  name: ""  # Defaults to release name
+  annotations: {}
+    # eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/myapp-service-role
+
+# ============================================================================
+# SERVICE
+# ============================================================================
+
+service:
+  type: ClusterIP
+  port: 8080
+  annotations: {}
+
+# ============================================================================
+# INGRESS (ALB)
+# ============================================================================
+
+ingress:
+  enabled: false
+  annotations: {}
+    # kubernetes.io/ingress.class: alb
+    # alb.ingress.kubernetes.io/scheme: internet-facing
+    # alb.ingress.kubernetes.io/target-type: ip
+    # alb.ingress.kubernetes.io/healthcheck-path: /health
+    # alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}]'
+  hosts:
+    - host: ""
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+# ============================================================================
+# HEALTH PROBES
+# ============================================================================
+
+livenessProbe:
+  enabled: true
+  path: /health
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+  successThreshold: 1
+
+readinessProbe:
+  enabled: true
+  path: /health
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+  successThreshold: 1
+
+# ============================================================================
+# RESOURCES
+# ============================================================================
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+# ============================================================================
+# AUTOSCALING (HPA)
+# ============================================================================
+
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+# ============================================================================
+# ENVIRONMENT VARIABLES
+# ============================================================================
+
+# Direct environment variables
+env: []
+  # - name: LOG_LEVEL
+  #   value: "info"
+
+# Load environment variables from a Kubernetes secret
+envFromSecret: ""  # e.g., myservice-dev-env
+
+# ============================================================================
+# FARGATE SUPPORT
+# ============================================================================
+
+fargate:
+  enabled: false
+  labels: {}
+    # eks.amazonaws.com/fargate-profile: myprofile
+
+# ============================================================================
+# SCHEDULING
+# ============================================================================
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}

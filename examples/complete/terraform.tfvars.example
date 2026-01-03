@@ -1,0 +1,86 @@
+# ============================================================================
+# EXAMPLE TERRAFORM VARIABLES
+# ============================================================================
+# Copy this file to terraform.tfvars and update values as needed
+
+region       = "us-east-1"
+project_name = "myproject"
+environment  = "dev"
+
+# VPC Configuration
+vpc_cidr = "10.0.0.0/16"
+az_count = 2
+
+# EKS Configuration
+kubernetes_version = "1.29"
+
+node_groups = {
+  general = {
+    instance_types = ["t3.medium"]
+    capacity_type  = "ON_DEMAND"
+    disk_size      = 50
+    desired_size   = 2
+    min_size       = 1
+    max_size       = 4
+  }
+  # Uncomment for Spot instances
+  # spot = {
+  #   instance_types = ["t3.medium", "t3.large"]
+  #   capacity_type  = "SPOT"
+  #   disk_size      = 50
+  #   desired_size   = 2
+  #   min_size       = 0
+  #   max_size       = 10
+  #   labels = {
+  #     "node-type" = "spot"
+  #   }
+  #   taints = [
+  #     {
+  #       key    = "spot"
+  #       value  = "true"
+  #       effect = "NO_SCHEDULE"
+  #     }
+  #   ]
+  # }
+}
+
+# Fargate Profiles (optional)
+fargate_profiles = {
+  # serverless = {
+  #   selectors = [
+  #     {
+  #       namespace = "serverless"
+  #       labels = {
+  #         "compute-type" = "fargate"
+  #       }
+  #     }
+  #   ]
+  # }
+}
+
+# Application IRSA Roles
+application_roles = {
+  # example-service = {
+  #   namespace       = "example-service-dev"
+  #   service_account = "example-service-dev"
+  #   policy_arns = [
+  #     "arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess",
+  #     "arn:aws:iam::aws:policy/AmazonDynamoDBReadOnlyAccess"
+  #   ]
+  # }
+}
+
+# ECR Repositories
+ecr_repositories = ["services"]
+
+# GitHub Repositories for OIDC
+github_repositories = [
+  # "your-org/your-repo"
+]
+
+# Tags
+tags = {
+  Environment = "dev"
+  ManagedBy   = "terraform"
+  Project     = "myproject"
+}
